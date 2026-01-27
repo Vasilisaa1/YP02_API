@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using CodeQuest.Services;
 
 var builder = WebApplication.CreateBuilder(args);
-
+builder.Services.AddSingleton<GigaChatImageService>();
 builder.Services.AddRazorPages();
 builder.Services.AddMvc(option => option.EnableEndpointRouting = true);
 var key = Encoding.ASCII.GetBytes("SuperSecretKey12345!");

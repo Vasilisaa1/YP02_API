@@ -39,6 +39,11 @@ namespace CodeQuest.Model
         public DateTime created_at { get; set; } = DateTime.Now;
 
 
+        public byte[]? ProfileIcon { get; set; }
 
+        // Добавляем поле для хранения MIME типа изображения
+        public string? ProfileIconMimeType { get; set; }
+
+        public bool? IsIconGenerated {  get; set; }
     }
 }
