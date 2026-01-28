@@ -6,6 +6,9 @@ using CodeQuest.Services;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<GigaChatImageService>();
 builder.Services.AddRazorPages();
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<ProfileIconGenerationQueue>();
+builder.Services.AddHostedService<ProfileIconGeneratorWorker>();
 builder.Services.AddMvc(option => option.EnableEndpointRouting = true);
 var key = Encoding.ASCII.GetBytes("SuperSecretKey12345!");
 builder.Services.AddAuthentication(x =>

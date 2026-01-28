@@ -15,12 +15,14 @@ namespace CodeQuest.Controllers
     {
         private const string SECRET_KEY = "SuperSecretKey12345!";
         private readonly GigaChatImageService _imageService;
-
-        public UsersController(GigaChatImageService imageService)
+        private readonly ProfileIconGenerationQueue _iconQueue;
+        public UsersController(
+                 GigaChatImageService imageService,
+                 ProfileIconGenerationQueue iconQueue)
         {
             _imageService = imageService;
+            _iconQueue = iconQueue;
         }
-
         private string HashPassword(string password)
         {
             using var sha256 = SHA256.Create();
@@ -45,27 +47,31 @@ namespace CodeQuest.Controllers
                 if (context.Users.Any(x => x.email == email))
                     return StatusCode(400, "Пользователь с таким email уже существует");
 
-                // Генерируем иконку профиля
-                byte[]? profileIcon = await _imageService.GenerateProfileIconAsync(username);
-
+                // Создаем пользователя БЕЗ ожидания генерации иконки
                 var newUser = new Model.Users
                 {
                     username = username,
                     email = email,
                     passwordhash = HashPassword(password),
                     created_at = DateTime.Now,
-                    ProfileIcon = profileIcon, // Может быть null
-                    ProfileIconMimeType = profileIcon != null ? "image/png" : null
+                    ProfileIcon = null,
+                    ProfileIconMimeType = null,
+                    IsIconGenerated = false
                 };
 
                 context.Users.Add(newUser);
-                context.SaveChanges();
+                await context.SaveChangesAsync();
+
+                // Добавляем в очередь для фоновой генерации
+                _iconQueue.EnqueueGeneration(newUser.id, username);
 
                 return Ok(new
                 {
                     message = "Пользователь успешно зарегистрирован",
                     userId = newUser.id,
-                    hasProfileIcon = profileIcon != null
+                    hasProfileIcon = false,
+                    isIconGenerating = true,
+                    note = "Иконка профиля генерируется в фоновом режиме"
                 });
             }
             catch (Exception ex)
@@ -74,13 +80,21 @@ namespace CodeQuest.Controllers
             }
         }
 
-        // Добавляем метод для получения иконки профиля
+
         [HttpGet("ProfileIcon/{userId}")]
         [ApiExplorerSettings(GroupName = "v1")]
         public ActionResult GetProfileIcon(int userId)
         {
             try
             {
+                // Сначала проверяем кэш
+                var cachedIcon = _iconQueue.GetGeneratedIcon(userId);
+                if (cachedIcon != null)
+                {
+                    return File(cachedIcon, "image/png");
+                }
+
+                // Если нет в кэше, проверяем БД
                 using var context = new UsersContext();
                 var user = context.Users.FirstOrDefault(u => u.id == userId);
 
@@ -89,6 +103,16 @@ namespace CodeQuest.Controllers
 
                 if (user.ProfileIcon == null || user.ProfileIcon.Length == 0)
                 {
+                    // Если иконка еще генерируется
+                    if (_iconQueue.IsGenerating(userId))
+                    {
+                        return Accepted(new
+                        {
+                            message = "Иконка профиля все еще генерируется",
+                            retryAfter = 30 // секунд
+                        });
+                    }
+
                     return NotFound("Иконка профиля не найдена");
                 }
 
@@ -100,72 +124,54 @@ namespace CodeQuest.Controllers
             }
         }
 
-        // Добавляем метод для обновления иконки профиля
-        [HttpPost("UpdateProfileIcon")]
-        [ApiExplorerSettings(GroupName = "v3")]
-        [ProducesResponseType(200)]
-        [ProducesResponseType(400)]
-        [ProducesResponseType(500)]
-        public async Task<ActionResult> UpdateProfileIcon([FromQuery] int userId)
-        {
-            try
-            {
-                using var context = new UsersContext();
-                var user = context.Users.FirstOrDefault(u => u.id == userId);
-
-                if (user == null)
-                    return NotFound("Пользователь не найден");
-
-                // Генерируем новую иконку
-                var newIcon = await _imageService.GenerateProfileIconAsync(user.username);
-
-                user.ProfileIcon = newIcon;
-                user.ProfileIconMimeType = newIcon != null ? "image/png" : null;
-
-                context.SaveChanges();
-
-                return Ok(new
-                {
-                    message = "Иконка профиля успешно обновлена",
-                    hasProfileIcon = newIcon != null
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"Ошибка при обновлении иконки: {ex.Message}");
-            }
-        }
-
-        // Обновляем метод GetUserById для включения информации об иконке
-        [HttpGet("{id}")]
+        [HttpGet("IconGenerationStatus/{userId}")]
         [ApiExplorerSettings(GroupName = "v1")]
-        public ActionResult GetUserById(int id)
+        public ActionResult GetIconGenerationStatus(int userId)
         {
-            try
-            {
-                using var context = new UsersContext();
-                var user = context.Users.FirstOrDefault(u => u.id == id);
-                if (user == null)
-                    return NotFound("Пользователь не найден");
+            using var context = new UsersContext();
+            var user = context.Users.FirstOrDefault(u => u.id == userId);
 
-                return Ok(new
-                {
-                    user.id,
-                    user.username,
-                    user.email,
-                    user.created_at,
-                    hasProfileIcon = user.ProfileIcon != null && user.ProfileIcon.Length > 0,
-                    profileIconUrl = user.ProfileIcon != null
-                        ? $"/api/Users/ProfileIcon/{user.id}"
-                        : null
-                });
-            }
-            catch (Exception ex)
+            if (user == null)
+                return NotFound("Пользователь не найден");
+
+            var isGenerating = _iconQueue.IsGenerating(userId);
+            var hasIcon = user.ProfileIcon != null && user.ProfileIcon.Length > 0;
+
+            return Ok(new
             {
-                return StatusCode(500, ex.Message);
-            }
+                userId,
+                isGenerating,
+                hasIcon,
+                canRetry = !isGenerating && !hasIcon
+            });
         }
 
+        [HttpPost("RetryIconGeneration/{userId}")]
+        [ApiExplorerSettings(GroupName = "v3")]
+        public ActionResult RetryIconGeneration(int userId)
+        {
+            using var context = new UsersContext();
+            var user = context.Users.FirstOrDefault(u => u.id == userId);
+
+            if (user == null)
+                return NotFound("Пользователь не найден");
+
+            // Проверяем, не генерируется ли уже
+            if (_iconQueue.IsGenerating(userId))
+            {
+                return BadRequest("Иконка уже генерируется");
+            }
+
+            // Добавляем в очередь повторной генерации
+            _iconQueue.EnqueueGeneration(userId, user.username);
+
+            return Ok(new
+            {
+                message = "Запущена повторная генерация иконки",
+                userId,
+                isGenerating = true
+            });
+        }
         // Обновляем метод GetAllUsers
         [HttpGet]
         [ApiExplorerSettings(GroupName = "v1")]
