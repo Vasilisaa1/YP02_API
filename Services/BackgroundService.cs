@@ -9,14 +9,17 @@ namespace CodeQuest.Services
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<ProfileIconGeneratorWorker> _logger;
+        private readonly IWebHostEnvironment _env;
         private readonly TimeSpan _processingInterval = TimeSpan.FromSeconds(10);
 
         public ProfileIconGeneratorWorker(
             IServiceProvider serviceProvider,
-            ILogger<ProfileIconGeneratorWorker> logger)
+            ILogger<ProfileIconGeneratorWorker> logger,
+            IWebHostEnvironment env)
         {
             _serviceProvider = serviceProvider;
             _logger = logger;
+            _env = env;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -40,11 +43,22 @@ namespace CodeQuest.Services
                         // Генерируем иконку
                         var iconBytes = await imageService.GenerateProfileIconAsync(username);
 
-                        // Помечаем как сгенерированную
-                        queue.MarkAsGenerated(userId, iconBytes);
+                        string? fileName = null;
 
-                        // Сохраняем в базу данных
-                        await SaveIconToDatabaseAsync(scope, userId, iconBytes);
+                        if (iconBytes != null)
+                        {
+                            // Сохраняем в папку img
+                            fileName = await SaveIconToFolderAsync(userId, iconBytes);
+
+                            if (!string.IsNullOrEmpty(fileName))
+                            {
+                                // Сохраняем название файла в БД
+                                await SaveFileNameToDatabaseAsync(userId, fileName);
+                            }
+                        }
+
+                        // Помечаем как сгенерированную в кэше
+                        queue.MarkAsGenerated(userId, fileName);
                     }
                 }
                 catch (Exception ex)
@@ -56,7 +70,36 @@ namespace CodeQuest.Services
             }
         }
 
-        private async Task SaveIconToDatabaseAsync(IServiceScope scope, int userId, byte[]? iconBytes)
+        private async Task<string?> SaveIconToFolderAsync(int userId, byte[] iconBytes)
+        {
+            try
+            {
+                // Создаем папку img если её нет
+                var imgFolder = Path.Combine(_env.WebRootPath, "img");
+                if (!Directory.Exists(imgFolder))
+                {
+                    Directory.CreateDirectory(imgFolder);
+                }
+
+                // Генерируем уникальное имя файла
+                var fileName = $"avatar_{userId}_{DateTime.Now:yyyyMMddHHmmss}.png";
+                var filePath = Path.Combine(imgFolder, fileName);
+
+                // Сохраняем файл
+                await System.IO.File.WriteAllBytesAsync(filePath, iconBytes);
+
+                _logger.LogInformation($"Иконка сохранена в файл: {fileName}, путь: {filePath}");
+
+                return fileName;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Ошибка сохранения иконки в папку для пользователя ID: {userId}");
+                return null;
+            }
+        }
+
+        private async Task SaveFileNameToDatabaseAsync(int userId, string fileName)
         {
             try
             {
@@ -65,28 +108,20 @@ namespace CodeQuest.Services
 
                 if (user != null)
                 {
-                    // Создаем новый контекст для гарантированного отслеживания
-                    using var freshContext = new UsersContext();
-                    var freshUser = await freshContext.Users.FindAsync(userId);
+                    user.ProfileIconFileName = fileName;
+                    user.IsIconGenerated = true;
+                    await context.SaveChangesAsync();
 
-                    if (freshUser != null)
-                    {
-                        freshUser.ProfileIcon = iconBytes;
-                        freshUser.ProfileIconMimeType = iconBytes != null ? "image/png" : null;
-                        freshUser.IsIconGenerated = iconBytes != null;
-
-                        await freshContext.SaveChangesAsync();
-                        _logger.LogInformation($"Иконка сохранена в БД для пользователя ID: {userId}, размер: {iconBytes?.Length ?? 0} байт");
-                    }
-                    else
-                    {
-                        _logger.LogWarning($"Пользователь ID: {userId} не найден при сохранении иконки");
-                    }
+                    _logger.LogInformation($"Название файла {fileName} сохранено в БД для пользователя ID: {userId}");
+                }
+                else
+                {
+                    _logger.LogWarning($"Пользователь ID: {userId} не найден при сохранении названия файла");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Ошибка сохранения иконки в БД для пользователя ID: {userId}");
+                _logger.LogError(ex, $"Ошибка сохранения названия файла в БД для пользователя ID: {userId}");
             }
         }
     }

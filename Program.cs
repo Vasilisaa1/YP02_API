@@ -4,12 +4,21 @@ using System.Text;
 using CodeQuest.Services;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddSingleton<GigaChatImageService>();
+
+// Добавляем поддержку статических файлов
+builder.Services.AddControllers();
 builder.Services.AddRazorPages();
+
+// Регистрируем сервисы
+builder.Services.AddSingleton<GigaChatImageService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ProfileIconGenerationQueue>();
 builder.Services.AddHostedService<ProfileIconGeneratorWorker>();
-builder.Services.AddMvc(option => option.EnableEndpointRouting = true);
+
+// Добавляем IWebHostEnvironment
+builder.Services.AddSingleton<IWebHostEnvironment>(builder.Environment);
+
+// Настройка аутентификации
 var key = Encoding.ASCII.GetBytes("SuperSecretKey12345!");
 builder.Services.AddAuthentication(x =>
 {
@@ -28,6 +37,8 @@ builder.Services.AddAuthentication(x =>
         ValidateAudience = false
     };
 });
+
+// Настройка Swagger
 builder.Services.AddSwaggerGen(option =>
 {
     option.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
@@ -50,16 +61,25 @@ builder.Services.AddSwaggerGen(option =>
         Version = "v4",
         Title = "Пробная версия"
     });
-    //String PathFile = Path.Combine(System.AppContext.BaseDirectory, "CodeQuest.xml");
-    //option.IncludeXmlComments(PathFile);
 });
+
 var app = builder.Build();
 
+// Настраиваем папку для статических файлов
+app.UseStaticFiles();
+
+// Создаем папку img если её нет
+var imgFolder = Path.Combine(app.Environment.WebRootPath, "img");
+if (!Directory.Exists(imgFolder))
+{
+    Directory.CreateDirectory(imgFolder);
+}
+
+// Middleware pipeline
 app.UseSwagger();
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseRouting();
-app.UseEndpoints(endpoints => { endpoints.MapControllers(); });
+app.MapControllers();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Запросы GET");
@@ -67,4 +87,5 @@ app.UseSwaggerUI(c =>
     c.SwaggerEndpoint("/swagger/v3/swagger.json", "Запросы PUT");
     c.SwaggerEndpoint("/swagger/v4/swagger.json", "Запросы DELETE");
 });
+
 app.Run();
