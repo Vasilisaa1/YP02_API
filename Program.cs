@@ -56,6 +56,7 @@ builder.Services.AddSwaggerGen(option =>
 var app = builder.Build();
 
 app.UseSwagger();
+app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRouting();
