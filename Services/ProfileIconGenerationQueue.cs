@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.AspNetCore.Hosting;
 
 namespace CodeQuest.Services
 {
@@ -7,15 +8,17 @@ namespace CodeQuest.Services
         private readonly Queue<(int userId, string username)> _pendingGenerations = new();
         private readonly IMemoryCache _memoryCache;
         private readonly ILogger<ProfileIconGenerationQueue> _logger;
-        private readonly SemaphoreSlim _queueSemaphore = new(1, 1);
+        private readonly IWebHostEnvironment _env;
         private readonly object _lock = new();
 
         public ProfileIconGenerationQueue(
             IMemoryCache memoryCache,
-            ILogger<ProfileIconGenerationQueue> logger)
+            ILogger<ProfileIconGenerationQueue> logger,
+            IWebHostEnvironment env)
         {
             _memoryCache = memoryCache;
             _logger = logger;
+            _env = env;
         }
 
         public void EnqueueGeneration(int userId, string username)
@@ -25,7 +28,6 @@ namespace CodeQuest.Services
                 _pendingGenerations.Enqueue((userId, username));
             }
 
-            // Сохраняем в кэш информацию о том, что генерация запущена
             var cacheKey = GetCacheKey(userId);
             _memoryCache.Set(cacheKey, new IconGenerationStatus
             {
@@ -58,7 +60,7 @@ namespace CodeQuest.Services
                    status?.IsGenerating == true;
         }
 
-        public void MarkAsGenerated(int userId, byte[]? iconData)
+        public void MarkAsGenerated(int userId, string? fileName)
         {
             var cacheKey = GetCacheKey(userId);
             var status = _memoryCache.Get<IconGenerationStatus>(cacheKey);
@@ -66,21 +68,21 @@ namespace CodeQuest.Services
             if (status != null)
             {
                 status.IsGenerating = false;
-                status.IsGenerated = iconData != null;
+                status.IsGenerated = !string.IsNullOrEmpty(fileName);
                 status.GeneratedAt = DateTime.UtcNow;
-                status.IconData = iconData;
+                status.FileName = fileName;
 
-                _memoryCache.Set(cacheKey, status, TimeSpan.FromHours(24)); // Храним результат сутки
-                _logger.LogInformation($"Иконка для пользователя ID: {userId} сгенерирована");
+                _memoryCache.Set(cacheKey, status, TimeSpan.FromHours(24));
+                _logger.LogInformation($"Иконка для пользователя ID: {userId} сгенерирована, файл: {fileName}");
             }
         }
 
-        public byte[]? GetGeneratedIcon(int userId)
+        public string? GetGeneratedIconFileName(int userId)
         {
             var cacheKey = GetCacheKey(userId);
             if (_memoryCache.TryGetValue(cacheKey, out IconGenerationStatus status))
             {
-                return status?.IconData;
+                return status?.FileName;
             }
             return null;
         }
@@ -94,7 +96,7 @@ namespace CodeQuest.Services
             public string? Username { get; set; }
             public DateTime EnqueuedAt { get; set; }
             public DateTime? GeneratedAt { get; set; }
-            public byte[]? IconData { get; set; }
+            public string? FileName { get; set; }
         }
     }
 }

@@ -16,13 +16,18 @@ namespace CodeQuest.Controllers
         private const string SECRET_KEY = "SuperSecretKey12345!";
         private readonly GigaChatImageService _imageService;
         private readonly ProfileIconGenerationQueue _iconQueue;
+        private readonly IWebHostEnvironment _env;
+
         public UsersController(
-                 GigaChatImageService imageService,
-                 ProfileIconGenerationQueue iconQueue)
+            GigaChatImageService imageService,
+            ProfileIconGenerationQueue iconQueue,
+            IWebHostEnvironment env)
         {
             _imageService = imageService;
             _iconQueue = iconQueue;
+            _env = env;
         }
+
         private string HashPassword(string password)
         {
             using var sha256 = SHA256.Create();
@@ -32,9 +37,6 @@ namespace CodeQuest.Controllers
 
         [HttpPost("Register")]
         [ApiExplorerSettings(GroupName = "v2")]
-        [ProducesResponseType(200)]
-        [ProducesResponseType(400)]
-        [ProducesResponseType(500)]
         public async Task<ActionResult> Register([FromForm] string username, [FromForm] string email, [FromForm] string password)
         {
             if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
@@ -47,15 +49,13 @@ namespace CodeQuest.Controllers
                 if (context.Users.Any(x => x.email == email))
                     return StatusCode(400, "Пользователь с таким email уже существует");
 
-                // Создаем пользователя БЕЗ ожидания генерации иконки
                 var newUser = new Model.Users
                 {
                     username = username,
                     email = email,
                     passwordhash = HashPassword(password),
                     created_at = DateTime.Now,
-                    ProfileIcon = null,
-                    ProfileIconMimeType = null,
+                    ProfileIconFileName = null,
                     IsIconGenerated = false
                 };
 
@@ -80,48 +80,73 @@ namespace CodeQuest.Controllers
             }
         }
 
-
         [HttpGet("ProfileIcon/{userId}")]
         [ApiExplorerSettings(GroupName = "v1")]
         public ActionResult GetProfileIcon(int userId)
         {
             try
             {
-                // Сначала проверяем кэш
-                var cachedIcon = _iconQueue.GetGeneratedIcon(userId);
-                if (cachedIcon != null)
-                {
-                    return File(cachedIcon, "image/png");
-                }
-
-                // Если нет в кэше, проверяем БД
                 using var context = new UsersContext();
                 var user = context.Users.FirstOrDefault(u => u.id == userId);
 
                 if (user == null)
                     return NotFound("Пользователь не найден");
 
-                if (user.ProfileIcon == null || user.ProfileIcon.Length == 0)
+                // Если файл есть в кэше
+                var cachedFileName = _iconQueue.GetGeneratedIconFileName(userId);
+                if (!string.IsNullOrEmpty(cachedFileName))
                 {
-                    // Если иконка еще генерируется
-                    if (_iconQueue.IsGenerating(userId))
-                    {
-                        return Accepted(new
-                        {
-                            message = "Иконка профиля все еще генерируется",
-                            retryAfter = 30 // секунд
-                        });
-                    }
-
-                    return NotFound("Иконка профиля не найдена");
+                    return GetPhysicalFileResult(cachedFileName);
                 }
 
-                return File(user.ProfileIcon, user.ProfileIconMimeType ?? "image/png");
+                // Если есть в БД
+                if (!string.IsNullOrEmpty(user.ProfileIconFileName))
+                {
+                    return GetPhysicalFileResult(user.ProfileIconFileName);
+                }
+
+                // Если иконка еще генерируется
+                if (_iconQueue.IsGenerating(userId))
+                {
+                    return Accepted(new
+                    {
+                        message = "Иконка профиля все еще генерируется",
+                        retryAfter = 30
+                    });
+                }
+
+                return NotFound("Иконка профиля не найдена");
             }
             catch (Exception ex)
             {
                 return StatusCode(500, $"Ошибка при получении иконки: {ex.Message}");
             }
+        }
+
+        private FileResult GetPhysicalFileResult(string fileName)
+        {
+            var imgFolder = Path.Combine(_env.WebRootPath, "img");
+            var filePath = Path.Combine(imgFolder, fileName);
+
+            if (!System.IO.File.Exists(filePath))
+            {
+                throw new FileNotFoundException($"Файл {fileName} не найден в папке img");
+            }
+
+            var contentType = GetContentType(fileName);
+            return PhysicalFile(filePath, contentType);
+        }
+
+        private string GetContentType(string fileName)
+        {
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            return extension switch
+            {
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".gif" => "image/gif",
+                _ => "application/octet-stream"
+            };
         }
 
         [HttpGet("IconGenerationStatus/{userId}")]
@@ -135,13 +160,14 @@ namespace CodeQuest.Controllers
                 return NotFound("Пользователь не найден");
 
             var isGenerating = _iconQueue.IsGenerating(userId);
-            var hasIcon = user.ProfileIcon != null && user.ProfileIcon.Length > 0;
+            var hasIcon = !string.IsNullOrEmpty(user.ProfileIconFileName);
 
             return Ok(new
             {
                 userId,
                 isGenerating,
                 hasIcon,
+                fileName = user.ProfileIconFileName,
                 canRetry = !isGenerating && !hasIcon
             });
         }
@@ -156,13 +182,26 @@ namespace CodeQuest.Controllers
             if (user == null)
                 return NotFound("Пользователь не найден");
 
-            // Проверяем, не генерируется ли уже
             if (_iconQueue.IsGenerating(userId))
             {
                 return BadRequest("Иконка уже генерируется");
             }
 
-            // Добавляем в очередь повторной генерации
+            // Удаляем старый файл если он существует
+            if (!string.IsNullOrEmpty(user.ProfileIconFileName))
+            {
+                var oldFilePath = Path.Combine(_env.WebRootPath, "img", user.ProfileIconFileName);
+                if (System.IO.File.Exists(oldFilePath))
+                {
+                    System.IO.File.Delete(oldFilePath);
+                }
+
+                // Очищаем поле в БД
+                user.ProfileIconFileName = null;
+                user.IsIconGenerated = false;
+                context.SaveChanges();
+            }
+
             _iconQueue.EnqueueGeneration(userId, user.username);
 
             return Ok(new
@@ -172,7 +211,7 @@ namespace CodeQuest.Controllers
                 isGenerating = true
             });
         }
-        // Обновляем метод GetAllUsers
+
         [HttpGet]
         [ApiExplorerSettings(GroupName = "v1")]
         public ActionResult<IEnumerable<Model.Users>> GetAllUsers()
@@ -188,10 +227,11 @@ namespace CodeQuest.Controllers
                     u.username,
                     u.email,
                     u.created_at,
-                    hasProfileIcon = u.ProfileIcon != null && u.ProfileIcon.Length > 0,
-                    profileIconUrl = u.ProfileIcon != null
+                    hasProfileIcon = !string.IsNullOrEmpty(u.ProfileIconFileName),
+                    profileIconUrl = !string.IsNullOrEmpty(u.ProfileIconFileName)
                         ? $"/api/Users/ProfileIcon/{u.id}"
-                        : null
+                        : null,
+                    fileName = u.ProfileIconFileName
                 });
 
                 return Ok(result);
@@ -202,7 +242,7 @@ namespace CodeQuest.Controllers
             }
         }
 
-        // Остальные методы оставляем без изменений
+        // Остальные методы остаются без изменений (Login, Update, GetCurrentUser, Delete)
         [HttpPost("Login")]
         [ApiExplorerSettings(GroupName = "v2")]
         public ActionResult Login(string email, string password)
@@ -242,15 +282,11 @@ namespace CodeQuest.Controllers
 
         [HttpPut("Update")]
         [ApiExplorerSettings(GroupName = "v3")]
-        [ProducesResponseType(200)]
-        [ProducesResponseType(400)]
-        [ProducesResponseType(404)]
-        [ProducesResponseType(500)]
         public ActionResult UpdateUser(
-       [FromQuery] int id,
-       [FromForm] string? username = null,
-       [FromForm] string? email = null,
-       [FromForm] string? password = null)
+            [FromQuery] int id,
+            [FromForm] string? username = null,
+            [FromForm] string? email = null,
+            [FromForm] string? password = null)
         {
             if (string.IsNullOrEmpty(username) && string.IsNullOrEmpty(email) && string.IsNullOrEmpty(password))
                 return BadRequest("Не указаны данные для обновления");
@@ -310,10 +346,11 @@ namespace CodeQuest.Controllers
                     user.username,
                     user.email,
                     user.created_at,
-                    hasProfileIcon = user.ProfileIcon != null && user.ProfileIcon.Length > 0,
-                    profileIconUrl = user.ProfileIcon != null
+                    hasProfileIcon = !string.IsNullOrEmpty(user.ProfileIconFileName),
+                    profileIconUrl = !string.IsNullOrEmpty(user.ProfileIconFileName)
                         ? $"/api/Users/ProfileIcon/{user.id}"
-                        : null
+                        : null,
+                    fileName = user.ProfileIconFileName
                 });
             }
             catch (Exception ex)
@@ -324,9 +361,6 @@ namespace CodeQuest.Controllers
 
         [HttpDelete("Delete")]
         [ApiExplorerSettings(GroupName = "v4")]
-        [ProducesResponseType(200)]
-        [ProducesResponseType(404)]
-        [ProducesResponseType(500)]
         public ActionResult DeleteUser([FromQuery] int id)
         {
             try
@@ -335,6 +369,16 @@ namespace CodeQuest.Controllers
                 var user = context.Users.FirstOrDefault(u => u.id == id);
                 if (user == null)
                     return NotFound("Пользователь не найден");
+
+                // Удаляем файл иконки если он существует
+                if (!string.IsNullOrEmpty(user.ProfileIconFileName))
+                {
+                    var filePath = Path.Combine(_env.WebRootPath, "img", user.ProfileIconFileName);
+                    if (System.IO.File.Exists(filePath))
+                    {
+                        System.IO.File.Delete(filePath);
+                    }
+                }
 
                 context.Users.Remove(user);
                 context.SaveChanges();
