@@ -1,4 +1,5 @@
 ﻿using CodeQuest.Context;
+using CodeQuest.Model;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CodeQuest.Controllers
@@ -83,6 +84,16 @@ namespace CodeQuest.Controllers
 
                 context.UserProgress.Add(progress);
                 context.SaveChanges();
+                
+                using var contextLog = new LogContext();
+                var log = new Model.Log
+                {
+                    idUser = progress.user_id,
+                    whatDo = "Полльзователь с Id " + progress.user_id + " прошёл тест " + progress.topic_id,
+                    created_At = DateTime.Now
+                };
+                contextLog.Log.Add(log);
+                contextLog.SaveChangesAsync();
                 return Ok("Прогресс добавлен");
             }
             catch (Exception ex)
