@@ -4,7 +4,7 @@ using System.Text;
 using CodeQuest.Services;
 
 var builder = WebApplication.CreateBuilder(args);
-
+//builder.WebHost.UseUrls("https://localhost:7064","http://10.0.2.2:5184");
 // Добавляем поддержку статических файлов
 builder.Services.AddControllers();
 builder.Services.AddRazorPages();

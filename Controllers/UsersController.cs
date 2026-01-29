@@ -1,4 +1,5 @@
 ﻿using CodeQuest.Context;
+using CodeQuest.Model;
 using CodeQuest.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
@@ -45,6 +46,7 @@ namespace CodeQuest.Controllers
             try
             {
                 using var context = new UsersContext();
+                using var contextLog = new LogContext();
 
                 if (context.Users.Any(x => x.email == email))
                     return StatusCode(400, "Пользователь с таким email уже существует");
@@ -65,6 +67,20 @@ namespace CodeQuest.Controllers
                 // Добавляем в очередь для фоновой генерации
                 _iconQueue.EnqueueGeneration(newUser.id, username);
 
+                string filePath = "C:\\Users\\student-a502.PERMAVIAT\\Desktop\\up02\\YP02_API\\bin\\Debug\\net6.0\\log.txt";
+                using (StreamWriter writer = new StreamWriter(filePath))
+                {
+                    writer.Write("Полльзователь с Id " + newUser.id + " прошёл регистрацию.\n");
+
+                }
+                var log = new Model.Log
+                {
+                    idUser = newUser.id,
+                    whatDo = "Полльзователь с Id " + newUser.id + " прошёл регистрацию.\n",
+                    created_At = DateTime.Now
+                };
+                contextLog.Log.Add(log);
+                await contextLog.SaveChangesAsync();
                 return Ok(new
                 {
                     message = "Пользователь успешно зарегистрирован",
@@ -242,7 +258,6 @@ namespace CodeQuest.Controllers
             }
         }
 
-        // Остальные методы остаются без изменений (Login, Update, GetCurrentUser, Delete)
         [HttpPost("Login")]
         [ApiExplorerSettings(GroupName = "v2")]
         public ActionResult Login(string email, string password)
@@ -272,6 +287,22 @@ namespace CodeQuest.Controllers
                         SecurityAlgorithms.HmacSha256Signature)
                 };
                 var token = tokenHandler.CreateToken(tokenDescriptor);
+                string filePath = "C:\\Users\\student-a502.PERMAVIAT\\Desktop\\up02\\YP02_API\\bin\\Debug\\net6.0\\log.txt";
+                using (StreamWriter writer = new StreamWriter(filePath))
+                {
+                    writer.WriteLine("Полльзователь с Id " + user.id + " вошёл в приложение.");
+                }
+
+                using var contextLog = new LogContext();
+                var log = new Model.Log
+                {
+                    idUser = user.id,
+                    whatDo = "Полльзователь с Id " + user.id + " вошёл в приложение.",
+                    created_At = DateTime.Now
+                };
+                contextLog.Log.Add(log);
+                contextLog.SaveChangesAsync();
+
                 return Ok(new { token = tokenHandler.WriteToken(token) });
             }
             catch (Exception ex)
@@ -314,6 +345,21 @@ namespace CodeQuest.Controllers
                     existingUser.passwordhash = HashPassword(password);
 
                 context.SaveChanges();
+                string filePath = "C:\\Users\\student-a502.PERMAVIAT\\Desktop\\up02\\YP02_API\\bin\\Debug\\net6.0\\log.txt";
+                using (StreamWriter writer = new StreamWriter(filePath))
+                {
+                    writer.WriteLine("Полльзователь с Id " + existingUser.id + " обновил данные.");
+
+                }
+                using var contextLog = new LogContext();
+                var log = new Model.Log
+                {
+                    idUser = existingUser.id,
+                    whatDo = "Полльзователь с Id " + existingUser.id + " обновил данные.",
+                    created_At = DateTime.Now
+                };
+                contextLog.Log.Add(log);
+                contextLog.SaveChangesAsync();
                 return Ok("Данные пользователя успешно обновлены");
             }
             catch (Exception ex)
@@ -382,6 +428,21 @@ namespace CodeQuest.Controllers
 
                 context.Users.Remove(user);
                 context.SaveChanges();
+                string filePaths = "C:\\Users\\student-a502.PERMAVIAT\\Desktop\\up02\\YP02_API\\bin\\Debug\\net6.0\\log.txt";
+                using (StreamWriter writer = new StreamWriter(filePaths))
+                {
+                    writer.WriteLine("Полльзователь с Id " + user.id + " удалил аккаунт.");
+
+                }
+                using var contextLog = new LogContext();
+                var log = new Model.Log
+                {
+                    idUser = user.id,
+                    whatDo = "Полльзователь с Id " + user.id + " удалил аккаунт.",
+                    created_At = DateTime.Now
+                };
+                contextLog.Log.Add(log);
+                contextLog.SaveChangesAsync();
                 return Ok("Пользователь успешно удален");
             }
             catch (Exception ex)
