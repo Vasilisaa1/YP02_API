@@ -4,6 +4,7 @@ using System.Text;
 using CodeQuest.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.FileProviders;
+using CodeQuest.Context;
 
 var builder = WebApplication.CreateBuilder(args);
 //builder.WebHost.UseUrls("https://localhost:7064","http://10.0.2.2:5184");
@@ -16,6 +17,10 @@ builder.Services.AddSingleton<GigaChatImageService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ProfileIconGenerationQueue>();
 builder.Services.AddHostedService<ProfileIconGeneratorWorker>();
+
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<WikiParserService>();
+builder.Services.AddDbContext<WikiParseContext>();
 
 // Добавляем IWebHostEnvironment
 builder.Services.AddSingleton<IWebHostEnvironment>(builder.Environment);
