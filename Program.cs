@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using CodeQuest.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 //builder.WebHost.UseUrls("https://localhost:7064","http://10.0.2.2:5184");
@@ -75,9 +77,18 @@ if (!Directory.Exists(imgFolder))
     Directory.CreateDirectory(imgFolder);
 }
 
+var env = app.Services.GetRequiredService<IWebHostEnvironment>();
+
 // Middleware pipeline
 app.UseSwagger();
 app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(Path.Combine(env.ContentRootPath, "wwwroot", "img")),
+    RequestPath = "/img"
+});
+
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

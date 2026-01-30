@@ -14,6 +14,7 @@ namespace CodeQuest.Context
         public LogContext()
         {
             Database.EnsureCreated();
+            Log.Load();
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
