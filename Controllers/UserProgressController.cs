@@ -1,4 +1,5 @@
-﻿using CodeQuest.Context;
+﻿using System;
+using CodeQuest.Context;
 using CodeQuest.Model;
 using Microsoft.AspNetCore.Mvc;
 
@@ -60,7 +61,7 @@ namespace CodeQuest.Controllers
         [ApiExplorerSettings(GroupName = "v2")]
         [ProducesResponseType(200)]
         [ProducesResponseType(500)]
-        public ActionResult Add([FromForm] Model.UserProgress progress)
+        public async Task<ActionResult> Add([FromForm] Model.UserProgress progress)
         {
             try
             {
@@ -93,7 +94,7 @@ namespace CodeQuest.Controllers
                     created_At = DateTime.Now
                 };
                 contextLog.Log.Add(log);
-                contextLog.SaveChangesAsync();
+                await contextLog.SaveChangesAsync();
                 return Ok("Прогресс добавлен");
             }
             catch (Exception ex)
@@ -111,7 +112,7 @@ namespace CodeQuest.Controllers
         [ProducesResponseType(200)]
         [ProducesResponseType(404)]
         [ProducesResponseType(500)]
-        public ActionResult Update(int id, [FromForm] Model.UserProgress progress)
+        public async Task<ActionResult> Update(int id, [FromForm] Model.UserProgress progress)
         {
             try
             {
@@ -129,6 +130,16 @@ namespace CodeQuest.Controllers
                     existing.completed_at = progress.completed_at;
 
                     context.SaveChanges();
+
+                    using var contextLog = new LogContext();
+                    var log = new Model.Log
+                    {
+                        idUser = progress.user_id,
+                        whatDo = "Полльзователь с Id " + progress.user_id + " повторно прошёл тест " + progress.topic_id,
+                        created_At = DateTime.Now
+                    };
+                    contextLog.Log.Add(log);
+                    await contextLog.SaveChangesAsync();
                     return Ok("Прогресс обновлен");
                 }
             }
@@ -146,7 +157,7 @@ namespace CodeQuest.Controllers
         [ApiExplorerSettings(GroupName = "v4")]
         [ProducesResponseType(200)]
         [ProducesResponseType(500)]
-        public ActionResult DeleteById(int id)
+        public async Task<ActionResult> DeleteById(int id)
         {
             try
             {
@@ -157,6 +168,15 @@ namespace CodeQuest.Controllers
 
                 context.UserProgress.Remove(record);
                 context.SaveChanges();
+                using var contextLog = new LogContext();
+                var log = new Model.Log
+                {
+                    idUser = record.user_id,
+                    whatDo = "Полльзователь с Id " + record.user_id + " удалил прохождене теста " + record.topic_id,
+                    created_At = DateTime.Now
+                };
+                contextLog.Log.Add(log);
+                await contextLog.SaveChangesAsync();
                 return Ok("Прогресс удален");
             }
             catch (Exception ex)

@@ -254,7 +254,7 @@ namespace CodeQuest.Controllers
 
         [HttpPost("Login")]
         [ApiExplorerSettings(GroupName = "v2")]
-        public ActionResult Login(string email, string password)
+        public async Task<ActionResult> Login(string email, string password)
         {
             try
             {
@@ -290,7 +290,7 @@ namespace CodeQuest.Controllers
                     created_At = DateTime.Now
                 };
                 contextLog.Log.Add(log);
-                contextLog.SaveChangesAsync();
+                await contextLog.SaveChangesAsync();
 
                 return Ok(new { token = tokenHandler.WriteToken(token) });
             }
@@ -302,7 +302,7 @@ namespace CodeQuest.Controllers
 
         [HttpPut("Update")]
         [ApiExplorerSettings(GroupName = "v3")]
-        public ActionResult UpdateUser(
+        public async Task<ActionResult> UpdateUser(
             [FromQuery] int id,
             [FromForm] string? username = null,
             [FromForm] string? email = null,
@@ -343,7 +343,7 @@ namespace CodeQuest.Controllers
                     created_At = DateTime.Now
                 };
                 contextLog.Log.Add(log);
-                contextLog.SaveChangesAsync();
+                await contextLog.SaveChangesAsync();
                 return Ok("Данные пользователя успешно обновлены");
             }
             catch (Exception ex)
@@ -391,7 +391,7 @@ namespace CodeQuest.Controllers
 
         [HttpDelete("Delete")]
         [ApiExplorerSettings(GroupName = "v4")]
-        public ActionResult DeleteUser([FromQuery] int id)
+        public async Task<ActionResult> DeleteUser([FromQuery] int id)
         {
             try
             {
@@ -421,7 +421,7 @@ namespace CodeQuest.Controllers
                     created_At = DateTime.Now
                 };
                 contextLog.Log.Add(log);
-                contextLog.SaveChangesAsync();
+                await contextLog.SaveChangesAsync();
                 return Ok("Пользователь успешно удален");
             }
             catch (Exception ex)
