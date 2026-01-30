@@ -49,22 +49,22 @@ namespace CodeQuest.Services
 
             if (completedCount >= 3 && !existingAchievements.Contains("FIRST_3_QUIZZES"))
             {
-                await GrantAchievement(userId, "FIRST_3_QUIZZES", "Пройдено 3 теста");
+                await GrantAchievement(userId, "Первые 3 теста", "Пройдено 3 теста");
             }
 
             if (completedCount >= 10 && !existingAchievements.Contains("QUIZ_MASTER"))
             {
-                await GrantAchievement(userId, "QUIZ_MASTER", "Пройдено 10 тестов");
+                await GrantAchievement(userId, "Мастер", "Пройдено 10 тестов");
             }
 
             if (completedCount >= 25 && !existingAchievements.Contains("QUIZ_EXPERT"))
             {
-                await GrantAchievement(userId, "QUIZ_EXPERT", "Пройдено 25 тестов");
+                await GrantAchievement(userId, "Эксперт", "Пройдено 25 тестов");
             }
 
             if (completedCount >= 50 && !existingAchievements.Contains("QUIZ_LEGEND"))
             {
-                await GrantAchievement(userId, "QUIZ_LEGEND", "Пройдено 50 тестов");
+                await GrantAchievement(userId, "Легенда", "Пройдено 50 тестов");
             }
         }
 
@@ -78,17 +78,17 @@ namespace CodeQuest.Services
 
             if (totalScore >= 100 && !existingAchievements.Contains("SCORE_100"))
             {
-                await GrantAchievement(userId, "SCORE_100", "Набрано 100 очков");
+                await GrantAchievement(userId, "100 очков", "Набрано 100 очков");
             }
 
             if (totalScore >= 500 && !existingAchievements.Contains("SCORE_500"))
             {
-                await GrantAchievement(userId, "SCORE_500", "Набрано 500 очков");
+                await GrantAchievement(userId, "500 очков", "Набрано 500 очков");
             }
 
             if (totalScore >= 1000 && !existingAchievements.Contains("SCORE_1000"))
             {
-                await GrantAchievement(userId, "SCORE_1000", "Набрано 1000 очков");
+                await GrantAchievement(userId, "1000 очков", "Набрано 1000 очков");
             }
         }
 
@@ -104,17 +104,17 @@ namespace CodeQuest.Services
 
             if (perfectScores >= 1 && !existingAchievements.Contains("FIRST_PERFECT"))
             {
-                await GrantAchievement(userId, "FIRST_PERFECT", "Первый идеальный результат");
+                await GrantAchievement(userId, "Первый идеальный результат", "Первый идеальный результат");
             }
 
             if (perfectScores >= 5 && !existingAchievements.Contains("PERFECT_STREAK_5"))
             {
-                await GrantAchievement(userId, "PERFECT_STREAK_5", "5 идеальных результатов");
+                await GrantAchievement(userId, "5 идеальных результатов", "5 идеальных результатов");
             }
 
             if (perfectScores >= 10 && !existingAchievements.Contains("PERFECTIONIST"))
             {
-                await GrantAchievement(userId, "PERFECTIONIST", "10 идеальных результатов");
+                await GrantAchievement(userId, "Перфекционист", "10 идеальных результатов");
             }
         }
 
@@ -135,7 +135,7 @@ namespace CodeQuest.Services
 
                 if (existingAchievement == null)
                 {
-                    await GrantAchievement(userId, "DAILY_STREAK_3", "3 теста за один день");
+                    await GrantAchievement(userId, "3 теста за один день", "3 теста за один день");
                 }
             }
 
@@ -156,7 +156,7 @@ namespace CodeQuest.Services
 
                 if (existingAchievement == null)
                 {
-                    await GrantAchievement(userId, "WEEKLY_STREAK", "Тесты 7 дней подряд");
+                    await GrantAchievement(userId, "Тесты всю неделю", "Тесты 7 дней подряд");
                 }
             }
         }
@@ -176,17 +176,17 @@ namespace CodeQuest.Services
 
             if (distinctTopics >= 3 && !existingAchievements.Contains("EXPLORER"))
             {
-                await GrantAchievement(userId, "EXPLORER", "Изучено 3 различные темы");
+                await GrantAchievement(userId, "Исследователь", "Изучено 3 различные темы");
             }
 
             if (distinctTopics >= 5 && !existingAchievements.Contains("VERSATILE_LEARNER"))
             {
-                await GrantAchievement(userId, "VERSATILE_LEARNER", "Изучено 5 различных тем");
+                await GrantAchievement(userId, "Универсальный ученик", "Изучено 5 различных тем");
             }
 
             if (distinctTopics >= 10 && !existingAchievements.Contains("KNOWLEDGE_SEEKER"))
             {
-                await GrantAchievement(userId, "KNOWLEDGE_SEEKER", "Изучено 10 различных тем");
+                await GrantAchievement(userId, "Искатель знаний", "Изучено 10 различных тем");
             }
         }
 
