@@ -1,4 +1,5 @@
-﻿using CodeQuest.Model;
+﻿// CodeQuest/Context/QuizContext.cs
+using CodeQuest.Model;
 using Microsoft.EntityFrameworkCore;
 
 namespace CodeQuest.Context
@@ -6,9 +7,10 @@ namespace CodeQuest.Context
     public class QuizContext : DbContext
     {
         public DbSet<Quiz> Quiz { get; set; }
-
-        // Добавляем DbSet для Topics, если его нет
         public DbSet<Topics> Topics { get; set; }
+        public DbSet<UserProgress> UserProgress { get; set; }
+        public DbSet<Achievement> Achievements { get; set; }
+        public DbSet<Users> Users { get; set; }
 
         public QuizContext()
         {
@@ -23,12 +25,23 @@ namespace CodeQuest.Context
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-       
             modelBuilder.Entity<Quiz>()
                 .HasOne<Topics>()
                 .WithMany()
                 .HasForeignKey(q => q.topic_id)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<UserProgress>()
+                .HasOne<Users>()
+                .WithMany()
+                .HasForeignKey(up => up.user_id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Achievement>()
+                .HasOne<Users>()
+                .WithMany()
+                .HasForeignKey(a => a.user_id)
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 }

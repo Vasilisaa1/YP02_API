@@ -1,5 +1,7 @@
-﻿using CodeQuest.Context;
+﻿// CodeQuest/Controllers/AchievementController.cs
+using CodeQuest.Context;
 using CodeQuest.Model;
+using CodeQuest.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CodeQuest.Controllers
@@ -8,307 +10,155 @@ namespace CodeQuest.Controllers
     [Route("api/Achievements")]
     public class AchievementController : Controller
     {
-        [Route("List")]
-        [HttpGet]
-        [ApiExplorerSettings(GroupName = "v1")]
-        public ActionResult List()
+        private readonly AchievementService _achievementService;
+
+        public AchievementController()
         {
-            try
-            {
-                var achievements = new AchievementContext().Achievements
-                    .OrderBy(a => a.order_index)
-                    .ToList();
-                return Json(achievements);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ex.Message);
-            }
+            var context = new QuizContext();
+            _achievementService = new AchievementService(context);
         }
 
-        [Route("UserAchievements")]
+        [Route("GetUserAchievements")]
         [HttpGet]
         [ApiExplorerSettings(GroupName = "v1")]
-        public ActionResult UserAchievements(int userId)
+        public ActionResult GetUserAchievements(int userId)
         {
             try
             {
-                using var context = new AchievementContext();
-
-                // Получаем все достижения
-                var allAchievements = context.Achievements
-                    .OrderBy(a => a.order_index)
-                    .ToList();
-
-                // Получаем достижения пользователя
-                var userAchievements = context.UserAchievements
-                    .Where(ua => ua.user_id == userId)
-                    .ToList();
-
-                // Формируем DTO
-                var result = new List<AchievementDto>();
-
-                foreach (var achievement in allAchievements)
+                var achievements = _achievementService.GetUserAchievements(userId);
+                return Json(new
                 {
-                    var userAchievement = userAchievements
-                        .FirstOrDefault(ua => ua.achievement_id == achievement.id);
-
-                    var targetValue = int.TryParse(achievement.criteria_value, out var target) ? target : 0;
-                    var currentProgress = userAchievement?.progress_current ?? 0;
-
-                    result.Add(new AchievementDto
-                    {
-                        id = achievement.id,
-                        name = achievement.name,
-                        description = achievement.description,
-                        criteria_type = achievement.criteria_type,
-                        criteria_value = achievement.criteria_value,
-                        points_reward = achievement.points_reward,
-                        order_index = achievement.order_index,
-                        is_unlocked = userAchievement?.unlocked_at != null,
-                        unlocked_at = userAchievement?.unlocked_at,
-                        progress_current = currentProgress,
-                        progress_target = targetValue,
-                        progress_percentage = targetValue > 0
-                            ? Math.Min(100, Math.Round((double)currentProgress / targetValue * 100, 2))
-                            : 0
-                    });
-                }
-
-                return Json(result);
+                    success = true,
+                    data = achievements,
+                    count = achievements.Count
+                });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, ex.Message);
+                return StatusCode(500, new
+                {
+                    success = false,
+                    error = ex.Message
+                });
             }
         }
 
-        [Route("UpdateProgress")]
+        [Route("CheckAchievements")]
         [HttpPost]
-        [ApiExplorerSettings(GroupName = "v2")]
-        public ActionResult UpdateProgress([FromBody] AchievementProgressRequest request)
+        [ApiExplorerSettings(GroupName = "v1")]
+        public async Task<ActionResult> CheckAchievements(int userId)
         {
             try
             {
-                Console.WriteLine("=== API: UPDATE PROGRESS START ===");
-                Console.WriteLine($"User ID: {request.user_id}");
-                Console.WriteLine($"Criteria Type: {request.criteria_type}");
-                Console.WriteLine($"Increment Value: {request.increment_value}");
+                await _achievementService.CheckAndGrantAchievements(userId);
 
-                using var context = new AchievementContext();
-
-                // Получаем все достижения по типу критерия
-                var achievements = context.Achievements
-                    .Where(a => a.criteria_type == request.criteria_type)
-                    .ToList();
-
-                var unlockedAchievements = new List<AchievementDto>();
-
-                foreach (var achievement in achievements)
-                {
-                    // Получаем или создаем запись пользовательского достижения
-                    var userAchievement = context.UserAchievements
-                        .FirstOrDefault(ua => ua.user_id == request.user_id &&
-                                             ua.achievement_id == achievement.id);
-
-                    if (userAchievement == null)
-                    {
-                        userAchievement = new UserAchievement
-                        {
-                            user_id = request.user_id,
-                            achievement_id = achievement.id,
-                            progress_current = 0,
-                            progress_target = ParseCriteriaValue(achievement.criteria_value),
-                            created_at = DateTime.Now,
-                            updated_at = DateTime.Now
-                        };
-                        context.UserAchievements.Add(userAchievement);
-                    }
-
-                    // Если достижение уже разблокировано, пропускаем
-                    if (userAchievement.unlocked_at != null)
-                    {
-                        continue;
-                    }
-
-                    // Обновляем прогресс
-                    userAchievement.progress_current += request.increment_value;
-                    userAchievement.updated_at = DateTime.Now;
-
-                    // Проверяем, выполнены ли критерии для разблокировки
-                    var targetValue = ParseCriteriaValue(achievement.criteria_value);
-
-                    if (userAchievement.progress_current >= targetValue)
-                    {
-                        // Разблокируем достижение
-                        userAchievement.unlocked_at = DateTime.Now;
-
-                        // УДАЛИЛИ начисление очков пользователю
-                        // var user = context.Users.First(u => u.id == request.user_id);
-                        // user.points += achievement.points_reward; <- ЭТО УБРАНО
-
-                        unlockedAchievements.Add(new AchievementDto
-                        {
-                            id = achievement.id,
-                            name = achievement.name,
-                            description = achievement.description,
-                            criteria_type = achievement.criteria_type,
-                            criteria_value = achievement.criteria_value,
-                            points_reward = achievement.points_reward, // Можно убрать из модели
-                            order_index = achievement.order_index,
-                            is_unlocked = true,
-                            unlocked_at = userAchievement.unlocked_at,
-                            progress_current = userAchievement.progress_current,
-                            progress_target = targetValue,
-                            progress_percentage = 100
-                        });
-
-                        Console.WriteLine($"Achievement '{achievement.name}' unlocked for user {request.user_id}");
-                    }
-                }
-
-                context.SaveChanges();
-
-                Console.WriteLine($"=== API: PROGRESS UPDATED SUCCESSFULLY ===");
-
-                if (unlockedAchievements.Any())
-                {
-                    return Json(new
-                    {
-                        success = true,
-                        message = "Progress updated and achievements unlocked",
-                        unlocked_achievements = unlockedAchievements
-                    });
-                }
+                var achievements = _achievementService.GetUserAchievements(userId);
 
                 return Json(new
                 {
                     success = true,
-                    message = "Progress updated"
+                    message = "Achievements checked successfully",
+                    data = achievements
                 });
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"=== API: ERROR ===");
-                Console.WriteLine($"Error: {ex.Message}");
-                return StatusCode(500, $"Internal server error: {ex.Message}");
+                return StatusCode(500, new
+                {
+                    success = false,
+                    error = ex.Message
+                });
             }
         }
 
-        // Вспомогательный метод для парсинга значения критерия
-        private int ParseCriteriaValue(string criteriaValue)
-        {
-            return int.TryParse(criteriaValue, out var result) ? result : 0;
-        }
-
-        [Route("Add")]
+        [Route("GrantCustomAchievement")]
         [HttpPost]
         [ApiExplorerSettings(GroupName = "v2")]
-        public ActionResult Add([FromForm] Achievement achievement)
+        public async Task<ActionResult> GrantCustomAchievement([FromForm] int userId, [FromForm] string achievementType)
         {
             try
             {
-                using var context = new AchievementContext();
+                using var context = new QuizContext();
 
-                // Проверка существования достижения с таким же именем
+                // Проверяем, есть ли уже такое достижение
                 var existing = context.Achievements
-                    .FirstOrDefault(a => a.name == achievement.name);
+                    .FirstOrDefault(a => a.user_id == userId && a.achievement_type == achievementType);
 
                 if (existing != null)
                 {
-                    return BadRequest($"Achievement with name '{achievement.name}' already exists");
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Achievement already granted"
+                    });
                 }
 
-                context.Achievements.Add(achievement);
-                context.SaveChanges();
-
-                return Ok($"Achievement added successfully with ID: {achievement.id}");
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, $"Internal server error: {ex.Message}");
-            }
-        }
-
-        [Route("ResetUserProgress")]
-        [HttpDelete]
-        [ApiExplorerSettings(GroupName = "v3")]
-        public ActionResult ResetUserProgress(int userId)
-        {
-            try
-            {
-                using var context = new AchievementContext();
-                var userAchievements = context.UserAchievements
-                    .Where(ua => ua.user_id == userId)
-                    .ToList();
-
-                context.UserAchievements.RemoveRange(userAchievements);
-                context.SaveChanges();
-
-                return Ok($"All achievements reset for user {userId}");
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ex.Message);
-            }
-        }
-
-        [Route("UnlockedCount")]
-        [HttpGet]
-        [ApiExplorerSettings(GroupName = "v1")]
-        public ActionResult UnlockedCount(int userId)
-        {
-            try
-            {
-                using var context = new AchievementContext();
-                var unlockedCount = context.UserAchievements
-                    .Count(ua => ua.user_id == userId && ua.unlocked_at != null);
-
-                var totalCount = context.Achievements.Count();
-
-                return Json(new
+                var achievement = new Achievement
                 {
                     user_id = userId,
-                    unlocked_count = unlockedCount,
-                    total_count = totalCount,
-                    percentage = totalCount > 0 ? Math.Round((double)unlockedCount / totalCount * 100, 2) : 0
+                    achievement_type = achievementType,
+                    unlocked_at = DateTime.Now
+                };
+
+                context.Achievements.Add(achievement);
+                await context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    success = true,
+                    message = $"Achievement '{achievementType}' granted to user {userId}",
+                    achievement = achievement
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, ex.Message);
+                return StatusCode(500, new
+                {
+                    success = false,
+                    error = ex.Message
+                });
             }
         }
 
-        [Route("RecentUnlocked")]
+        [Route("RecentAchievements")]
         [HttpGet]
         [ApiExplorerSettings(GroupName = "v1")]
-        public ActionResult RecentUnlocked(int userId, int limit = 5)
+        public ActionResult RecentAchievements(int limit = 10)
         {
             try
             {
-                using var context = new AchievementContext();
+                using var context = new QuizContext();
 
-                var recentAchievements = (from ua in context.UserAchievements
-                                          join a in context.Achievements on ua.achievement_id equals a.id
-                                          where ua.user_id == userId && ua.unlocked_at != null
-                                          orderby ua.unlocked_at descending
-                                          select new
-                                          {
-                                              id = a.id,
-                                              name = a.name,
-                                              description = a.description,
-                                              unlocked_at = ua.unlocked_at,
-                                              days_ago = (DateTime.Now - ua.unlocked_at.Value).Days
-                                          })
-                                         .Take(limit)
-                                         .ToList();
+                var recentAchievements = context.Achievements
+                    .OrderByDescending(a => a.unlocked_at)
+                    .Take(limit)
+                    .Join(context.Users,
+                        a => a.user_id,
+                        u => u.id,
+                        (a, u) => new
+                        {
+                            achievement_id = a.id,
+                            user_id = a.user_id,
+                            username = u.username,
+                            achievement_type = a.achievement_type,
+                            unlocked_at = a.unlocked_at
+                        })
+                    .ToList();
 
-                return Json(recentAchievements);
+                return Json(new
+                {
+                    success = true,
+                    data = recentAchievements,
+                    count = recentAchievements.Count
+                });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, ex.Message);
+                return StatusCode(500, new
+                {
+                    success = false,
+                    error = ex.Message
+                });
             }
         }
     }
