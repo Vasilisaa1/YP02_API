@@ -292,7 +292,7 @@ namespace CodeQuest.Controllers
                 contextLog.Log.Add(log);
                 await contextLog.SaveChangesAsync();
 
-                return Ok(new { token = tokenHandler.WriteToken(token) });
+                return Ok(new { token = tokenHandler.WriteToken(token), user.id });
             }
             catch (Exception ex)
             {
