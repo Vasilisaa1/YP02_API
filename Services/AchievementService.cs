@@ -1,5 +1,4 @@
-﻿// CodeQuest/Services/AchievementService.cs
-using CodeQuest.Context;
+﻿using CodeQuest.Context;
 using CodeQuest.Model;
 
 namespace CodeQuest.Services
@@ -13,12 +12,10 @@ namespace CodeQuest.Services
             _context = context;
         }
 
-        // Метод для проверки и выдачи достижений при обновлении прогресса
         public async Task CheckAndGrantAchievements(int userId)
         {
             try
             {
-                // Получаем прогресс пользователя
                 var userProgress = _context.UserProgress
                     .Where(up => up.user_id == userId && up.is_completed == true)
                     .ToList();
@@ -26,7 +23,6 @@ namespace CodeQuest.Services
                 var completedQuizzesCount = userProgress.Count;
                 var totalScore = userProgress.Sum(up => up.score);
 
-                // Проверяем достижения
                 await CheckQuizCountAchievements(userId, completedQuizzesCount);
                 await CheckScoreAchievements(userId, totalScore);
                 await CheckPerfectScoreAchievements(userId, userProgress);
@@ -39,7 +35,6 @@ namespace CodeQuest.Services
             }
         }
 
-        // Достижения за количество пройденных тестов
         private async Task CheckQuizCountAchievements(int userId, int completedCount)
         {
             var existingAchievements = _context.Achievements
@@ -47,28 +42,28 @@ namespace CodeQuest.Services
                 .Select(a => a.achievement_type)
                 .ToList();
 
-            if (completedCount >= 3 && !existingAchievements.Contains("FIRST_3_QUIZZES"))
+            // Сохраняем русские названия
+            if (completedCount >= 3 && !existingAchievements.Contains("Первые 3 теста"))
             {
-                await GrantAchievement(userId, "Первые 3 теста", "Пройдено 3 теста");
+                await GrantAchievement(userId, "Первые 3 теста");
             }
 
-            if (completedCount >= 10 && !existingAchievements.Contains("QUIZ_MASTER"))
+            if (completedCount >= 10 && !existingAchievements.Contains("Мастер тестов"))
             {
-                await GrantAchievement(userId, "Мастер", "Пройдено 10 тестов");
+                await GrantAchievement(userId, "Мастер тестов");
             }
 
-            if (completedCount >= 25 && !existingAchievements.Contains("QUIZ_EXPERT"))
+            if (completedCount >= 25 && !existingAchievements.Contains("Эксперт тестов"))
             {
-                await GrantAchievement(userId, "Эксперт", "Пройдено 25 тестов");
+                await GrantAchievement(userId, "Эксперт тестов");
             }
 
-            if (completedCount >= 50 && !existingAchievements.Contains("QUIZ_LEGEND"))
+            if (completedCount >= 50 && !existingAchievements.Contains("Легенда тестов"))
             {
-                await GrantAchievement(userId, "Легенда", "Пройдено 50 тестов");
+                await GrantAchievement(userId, "Легенда тестов");
             }
         }
 
-        // Достижения за общий счет
         private async Task CheckScoreAchievements(int userId, int totalScore)
         {
             var existingAchievements = _context.Achievements
@@ -76,23 +71,22 @@ namespace CodeQuest.Services
                 .Select(a => a.achievement_type)
                 .ToList();
 
-            if (totalScore >= 100 && !existingAchievements.Contains("SCORE_100"))
+            if (totalScore >= 100 && !existingAchievements.Contains("100 очков"))
             {
-                await GrantAchievement(userId, "100 очков", "Набрано 100 очков");
+                await GrantAchievement(userId, "100 очков");
             }
 
-            if (totalScore >= 500 && !existingAchievements.Contains("SCORE_500"))
+            if (totalScore >= 500 && !existingAchievements.Contains("500 очков"))
             {
-                await GrantAchievement(userId, "500 очков", "Набрано 500 очков");
+                await GrantAchievement(userId, "500 очков");
             }
 
-            if (totalScore >= 1000 && !existingAchievements.Contains("SCORE_1000"))
+            if (totalScore >= 1000 && !existingAchievements.Contains("1000 очков"))
             {
-                await GrantAchievement(userId, "1000 очков", "Набрано 1000 очков");
+                await GrantAchievement(userId, "1000 очков");
             }
         }
 
-        // Достижения за идеальные результаты
         private async Task CheckPerfectScoreAchievements(int userId, List<UserProgress> progress)
         {
             var existingAchievements = _context.Achievements
@@ -100,25 +94,29 @@ namespace CodeQuest.Services
                 .Select(a => a.achievement_type)
                 .ToList();
 
-            var perfectScores = progress.Count(up => up.score == up.total_questions);
+            // Исправляем подсчет идеальных результатов
+            var perfectScores = progress.Count(up => {
+                // Предполагаем, что total_questions - это максимальное количество баллов
+                // Или возможно у вас есть отдельное поле max_score
+                return up.score == up.total_questions;
+            });
 
-            if (perfectScores >= 1 && !existingAchievements.Contains("FIRST_PERFECT"))
+            if (perfectScores >= 1 && !existingAchievements.Contains("Первый идеальный результат"))
             {
-                await GrantAchievement(userId, "Первый идеальный результат", "Первый идеальный результат");
+                await GrantAchievement(userId, "Первый идеальный результат");
             }
 
-            if (perfectScores >= 5 && !existingAchievements.Contains("PERFECT_STREAK_5"))
+            if (perfectScores >= 5 && !existingAchievements.Contains("5 идеальных результатов"))
             {
-                await GrantAchievement(userId, "5 идеальных результатов", "5 идеальных результатов");
+                await GrantAchievement(userId, "5 идеальных результатов");
             }
 
-            if (perfectScores >= 10 && !existingAchievements.Contains("PERFECTIONIST"))
+            if (perfectScores >= 10 && !existingAchievements.Contains("Перфекционист"))
             {
-                await GrantAchievement(userId, "Перфекционист", "10 идеальных результатов");
+                await GrantAchievement(userId, "Перфекционист");
             }
         }
 
-        // Достижения за серии
         private async Task CheckStreakAchievements(int userId)
         {
             var todayProgress = _context.UserProgress
@@ -130,12 +128,13 @@ namespace CodeQuest.Services
 
             if (todayProgress.Count >= 3)
             {
+                // Используем русское название
                 var existingAchievement = _context.Achievements
-                    .FirstOrDefault(a => a.user_id == userId && a.achievement_type == "DAILY_STREAK_3");
+                    .FirstOrDefault(a => a.user_id == userId && a.achievement_type == "3 теста за один день");
 
                 if (existingAchievement == null)
                 {
-                    await GrantAchievement(userId, "3 теста за один день", "3 теста за один день");
+                    await GrantAchievement(userId, "3 теста за один день");
                 }
             }
 
@@ -151,17 +150,17 @@ namespace CodeQuest.Services
 
             if (last7DaysProgress >= 7)
             {
+                // Используем русское название
                 var existingAchievement = _context.Achievements
-                    .FirstOrDefault(a => a.user_id == userId && a.achievement_type == "WEEKLY_STREAK");
+                    .FirstOrDefault(a => a.user_id == userId && a.achievement_type == "Тесты всю неделю");
 
                 if (existingAchievement == null)
                 {
-                    await GrantAchievement(userId, "Тесты всю неделю", "Тесты 7 дней подряд");
+                    await GrantAchievement(userId, "Тесты всю неделю");
                 }
             }
         }
 
-        // Достижения за изучение разных тем
         private async Task CheckTopicMasterAchievements(int userId, List<UserProgress> progress)
         {
             var distinctTopics = progress
@@ -174,39 +173,37 @@ namespace CodeQuest.Services
                 .Select(a => a.achievement_type)
                 .ToList();
 
-            if (distinctTopics >= 3 && !existingAchievements.Contains("EXPLORER"))
+            if (distinctTopics >= 3 && !existingAchievements.Contains("Исследователь"))
             {
-                await GrantAchievement(userId, "Исследователь", "Изучено 3 различные темы");
+                await GrantAchievement(userId, "Исследователь");
             }
 
-            if (distinctTopics >= 5 && !existingAchievements.Contains("VERSATILE_LEARNER"))
+            if (distinctTopics >= 5 && !existingAchievements.Contains("Универсальный ученик"))
             {
-                await GrantAchievement(userId, "Универсальный ученик", "Изучено 5 различных тем");
+                await GrantAchievement(userId, "Универсальный ученик");
             }
 
-            if (distinctTopics >= 10 && !existingAchievements.Contains("KNOWLEDGE_SEEKER"))
+            if (distinctTopics >= 10 && !existingAchievements.Contains("Искатель знаний"))
             {
-                await GrantAchievement(userId, "Искатель знаний", "Изучено 10 различных тем");
+                await GrantAchievement(userId, "Искатель знаний");
             }
         }
 
-        // Метод выдачи достижения
-        private async Task GrantAchievement(int userId, string achievementType, string description = "")
+        private async Task GrantAchievement(int userId, string achievementType)
         {
             var achievement = new Achievement
             {
                 user_id = userId,
-                achievement_type = achievementType,
+                achievement_type = achievementType, // Сохраняем русское название
                 unlocked_at = DateTime.Now
             };
 
             _context.Achievements.Add(achievement);
             await _context.SaveChangesAsync();
 
-            Console.WriteLine($"Achievement granted: User {userId} - {achievementType} ({description})");
+            Console.WriteLine($"Достижение получено: Пользователь {userId} - {achievementType}");
         }
 
-        // Получение всех достижений пользователя
         public List<Achievement> GetUserAchievements(int userId)
         {
             return _context.Achievements
@@ -215,7 +212,6 @@ namespace CodeQuest.Services
                 .ToList();
         }
 
-        // Получение статистики достижений
         public AchievementStats GetAchievementStats(int userId)
         {
             var achievements = GetUserAchievements(userId);
@@ -234,7 +230,6 @@ namespace CodeQuest.Services
         }
     }
 
-    // Класс для статистики
     public class AchievementStats
     {
         public int TotalAchievements { get; set; }
