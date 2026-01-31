@@ -93,7 +93,7 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/img"
 });
 
-
+app.MapGet("/", () => Results.Redirect("/swagger/index.html"));
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
